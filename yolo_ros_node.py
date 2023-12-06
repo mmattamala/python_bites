@@ -1,8 +1,11 @@
 #!/usr/bin/env python
-# author: Matias Mattamala
+# Author: Matias Mattamala
+# Description: ROS node to run Ultralytics' YOLO models
 #
 # Dependencies (assuming ROS installation on base system)
-#  - No dependencies, just pure ROS libs
+#  python3 -m venv env --system-site-packages
+#  source activate env/bin/activate
+#  pip install torch torchvision ultralytics
 
 import rospy
 import rostopic

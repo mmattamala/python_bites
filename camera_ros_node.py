@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-# author: Matias Mattamala
+# Author: Matias Mattamala
+# Description: a ROS node to publish images from USB camera
 #
 # Dependencies (assuming ROS installation on base system)
-#  python3 -m venv env --system-site-packages
-#  source activate env/bin/activate
-#  pip install torch torchvision ultralytics
+#  - No dependencies, just pure ROS libs
+
 
 import rospy
 import cv2
