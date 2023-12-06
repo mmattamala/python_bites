@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+# author: Matias Mattamala
+#
+# Dependencies (assuming ROS installation on base system)
+#  python3 -m venv env --system-site-packages
+#  source activate env/bin/activate
+#  pip install torch torchvision ultralytics
 
 import rospy
 import cv2

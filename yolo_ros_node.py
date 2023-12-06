@@ -1,8 +1,11 @@
 #!/usr/bin/env python
+# author: Matias Mattamala
+#
+# Dependencies (assuming ROS installation on base system)
+#  - No dependencies, just pure ROS libs
 
 import rospy
 import rostopic
-import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
@@ -17,12 +20,18 @@ class YoloRos:
     def __init__(self):
         # Read ROS parameters
         input_topic = rospy.get_param("~input_image_topic", "/camera/image")
-        self._prob = rospy.get_param("~valid_prob", 0.5)
-        self._model_name = rospy.get_param(
-            "~model", "yolov8n-seg.pt"
-        )  # for YOLO only "yolov8n.pt"
+
+        # for YOLO only "yolov8n.pt"
+        self._model_name = rospy.get_param("~model", "yolov8n-seg.pt")
+        
+        # Device where the model runs
         self._device = rospy.get_param("~device", "cpu")
-        self._alpha = rospy.get_param("~alpha", 0.3)  # for visualization purposes
+        
+        # ALpha value for segmentation masks
+        self._alpha = rospy.get_param("~alpha", 0.3)
+
+        # Filter visualizations by confidence
+        self._conf = rospy.get_param("~valid_conf", 0.7)
 
         # Load model
         self._model = YOLO(self._model_name)
@@ -50,23 +59,24 @@ class YoloRos:
         self._bridge = CvBridge()
 
     def callback(self, msg):
-        # convert image + predict
+        # Convert to numpy image
         if self._is_compressed:
             img = self._bridge.compressed_imgmsg_to_cv2(msg)
         else:
             img = self._bridge.imgmsg_to_cv2(msg)
 
-        # Run inference with the YOLOv8n model on the 'bus.jpg' image
+        # Run inference
         result = self._model(img)[0]
 
         # Anotate results
+        # Show bounding boxes
         annotator = Annotator(img)
         boxes = result.boxes
         for box in boxes:
             b = box.xyxy[0]  # get box coordinates in (top, left, bottom, right) format
-            c = box.cls # class
-            p = box.conf.item() # confidence
-            if p > self._prob:
+            c = box.cls  # class
+            p = box.conf.item()  # confidence
+            if p > self._conf:
                 annotator.box_label(
                     b,
                     f"{self._model.names[int(c)]} ({p * 100:.2f}%)",
@@ -81,31 +91,31 @@ class YoloRos:
         probs = result.boxes.conf.cpu().numpy()  # confidence score, (N, 1)
         boxes = result.boxes.xyxy.cpu().numpy()  # box with xyxy format, (N, 4)
 
-        # segmentation
-        masks = result.masks.data.cpu().numpy()  # masks, (N, H, W)
-        masks = np.moveaxis(masks, 0, -1)  # masks, (H, W, N)
-        # rescale masks to original image
-        masks = scale_image(masks, result.masks.orig_shape)
-        masks = np.moveaxis(masks, -1, 0)  # masks, (N, H, W)
+        if result.masks is not None:
+            masks = result.masks.data.cpu().numpy()  # masks, (N, H, W)
+            masks = np.moveaxis(masks, 0, -1)  # masks, (H, W, N)
+            # rescale masks to original image
+            masks = scale_image(masks, result.masks.orig_shape)
+            masks = np.moveaxis(masks, -1, 0)  # masks, (N, H, W)
 
-        for mask, c, p in zip(masks, cls, probs):
-            if p > self._prob:
-                color = colors(c, True)
-                colored_mask = np.expand_dims(mask, 0).repeat(3, axis=0)
-                colored_mask = np.moveaxis(colored_mask, 0, -1)
-                masked = np.ma.MaskedArray(out_img, mask=colored_mask, fill_value=color)
-                overlay_img = masked.filled()
-                out_img = cv2.addWeighted(
-                    out_img, 1 - self._alpha, overlay_img, self._alpha, 0
-                )
+            for mask, c, p in zip(masks, cls, probs):
+                if p > self._conf:
+                    color = colors(c, True)
+                    colored_mask = np.expand_dims(mask, 0).repeat(3, axis=0)
+                    colored_mask = np.moveaxis(colored_mask, 0, -1)
+                    masked = np.ma.MaskedArray(out_img, mask=colored_mask, fill_value=color)
+                    overlay_img = masked.filled()
+                    out_img = cv2.addWeighted(
+                        out_img, 1 - self._alpha, overlay_img, self._alpha, 0
+                    )
 
-        # publish
+        # Publish
         out_msg = self._bridge.cv2_to_imgmsg(out_img, encoding="bgr8")
         out_msg.header = msg.header
         self._pub.publish(out_msg)
 
 
 if __name__ == "__main__":
-    rospy.init_node("yolo_ros")
+    rospy.init_node("yolo_ros_node")
     yolo = YoloRos()
     rospy.spin()
