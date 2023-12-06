@@ -23,10 +23,10 @@ class YoloRos:
 
         # for YOLO only "yolov8n.pt"
         self._model_name = rospy.get_param("~model", "yolov8n-seg.pt")
-        
+
         # Device where the model runs
         self._device = rospy.get_param("~device", "cpu")
-        
+
         # ALpha value for segmentation masks
         self._alpha = rospy.get_param("~alpha", 0.3)
 
@@ -103,7 +103,9 @@ class YoloRos:
                     color = colors(c, True)
                     colored_mask = np.expand_dims(mask, 0).repeat(3, axis=0)
                     colored_mask = np.moveaxis(colored_mask, 0, -1)
-                    masked = np.ma.MaskedArray(out_img, mask=colored_mask, fill_value=color)
+                    masked = np.ma.MaskedArray(
+                        out_img, mask=colored_mask, fill_value=color
+                    )
                     overlay_img = masked.filled()
                     out_img = cv2.addWeighted(
                         out_img, 1 - self._alpha, overlay_img, self._alpha, 0
