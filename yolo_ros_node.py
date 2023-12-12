@@ -48,15 +48,15 @@ class YoloRos:
 
         if self._is_compressed:
             self._sub = rospy.Subscriber(
-                input_image_topic, CompressedImage, self.callback, queue_size=10
+                input_image_topic, CompressedImage, self.callback, queue_size=1
             )
         else:
             self._sub = rospy.Subscriber(
-                input_image_topic, Image, self.callback, queue_size=10
+                input_image_topic, Image, self.callback, queue_size=1
             )
 
         # Prepare publisher
-        self._pub = rospy.Publisher("~output_image", Image, queue_size=10)
+        self._pub = rospy.Publisher("~output_image", Image, queue_size=1)
 
         # Prepare cv bridge
         self._bridge = CvBridge()
