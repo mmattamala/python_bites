@@ -22,7 +22,9 @@ from ultralytics.utils.plotting import Annotator, colors
 class YoloRos:
     def __init__(self):
         # Read ROS parameters
-        input_topic = rospy.get_param("~input_image_topic", "/alphasense_driver_ros/cam0/color/image")
+        input_topic = rospy.get_param(
+            "~input_image_topic", "/alphasense_driver_ros/cam0/color/image"
+        )
         output_topic = rospy.get_param("~output_image_topic", "~output_image")
 
         # for YOLO only "yolov8n.pt", for segmentation "yolov8n-seg.pt"
