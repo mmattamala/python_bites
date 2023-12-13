@@ -3,7 +3,7 @@
 # Description: ROS node to run Ultralytics' YOLO models
 #
 # Dependencies (assuming ROS installation on base system)
-#  python3 -m venv env --system-site-packages
+#  python3 -m venv yolo_env --system-site-packages
 #  source activate env/bin/activate
 #  pip install torch torchvision ultralytics
 
@@ -22,16 +22,20 @@ from ultralytics.utils.plotting import Annotator, colors
 class YoloRos:
     def __init__(self):
         # Read ROS parameters
-        input_topic = rospy.get_param("~input_image_topic", "/camera/image")
+        input_topic = rospy.get_param("~input_image_topic", "/alphasense_driver_ros/cam0/color/image")
+        output_topic = rospy.get_param("~output_image_topic", "~output_image")
 
-        # for YOLO only "yolov8n.pt"
-        self._model_name = rospy.get_param("~model", "yolov8n-seg.pt")
+        # for YOLO only "yolov8n.pt", for segmentation "yolov8n-seg.pt"
+        self._model_name = rospy.get_param("~model", "yolov8n.pt")
 
         # Device where the model runs
         self._device = rospy.get_param("~device", "cpu")
 
-        # ALpha value for segmentation masks
+        # Alpha value for segmentation masks
         self._alpha = rospy.get_param("~alpha", 0.3)
+
+        # Valid classes
+        self._classes = list(rospy.get_param("~classes", []))
 
         # Filter visualizations by confidence
         self._conf = rospy.get_param("~valid_conf", 0.7)
@@ -56,7 +60,7 @@ class YoloRos:
             )
 
         # Prepare publisher
-        self._pub = rospy.Publisher("~output_image", Image, queue_size=1)
+        self._pub = rospy.Publisher(output_topic, Image, queue_size=1)
 
         # Prepare cv bridge
         self._bridge = CvBridge()
@@ -79,12 +83,14 @@ class YoloRos:
             b = box.xyxy[0]  # get box coordinates in (top, left, bottom, right) format
             c = box.cls  # class
             p = box.conf.item()  # confidence
-            if p > self._conf:
-                annotator.box_label(
-                    b,
-                    f"{self._model.names[int(c)]} ({p * 100:.2f}%)",
-                    color=colors(c, True),
-                )
+            c_str = self._model.names[int(box.cls)]  # class string
+            if (len(self._classes)) == 0 or (c_str in self._classes):
+                if p > self._conf:
+                    annotator.box_label(
+                        b,
+                        f"{c_str} ({p * 100:.2f}%)",
+                        color=colors(c, True),
+                    )
         out_img = annotator.result()
 
         # Show segmentation
@@ -102,17 +108,19 @@ class YoloRos:
             masks = np.moveaxis(masks, -1, 0)  # masks, (N, H, W)
 
             for mask, c, p in zip(masks, cls, probs):
-                if p > self._conf:
-                    color = colors(c, True)
-                    colored_mask = np.expand_dims(mask, 0).repeat(3, axis=0)
-                    colored_mask = np.moveaxis(colored_mask, 0, -1)
-                    masked = np.ma.MaskedArray(
-                        out_img, mask=colored_mask, fill_value=color
-                    )
-                    overlay_img = masked.filled()
-                    out_img = cv2.addWeighted(
-                        out_img, 1 - self._alpha, overlay_img, self._alpha, 0
-                    )
+                c_str = self._model.names[int(box.cls)]  # class string
+                if len(self._classes) == 0 or (c_str in self._classes):
+                    if p > self._conf:
+                        color = colors(c, True)
+                        colored_mask = np.expand_dims(mask, 0).repeat(3, axis=0)
+                        colored_mask = np.moveaxis(colored_mask, 0, -1)
+                        masked = np.ma.MaskedArray(
+                            out_img, mask=colored_mask, fill_value=color
+                        )
+                        overlay_img = masked.filled()
+                        out_img = cv2.addWeighted(
+                            out_img, 1 - self._alpha, overlay_img, self._alpha, 0
+                        )
 
         # Publish
         out_msg = self._bridge.cv2_to_imgmsg(out_img, encoding="bgr8")
