@@ -22,7 +22,7 @@ if __name__ == "__main__":
     vid = cv2.VideoCapture(0)
 
     rate = rospy.Rate(30)
-    while True:
+    while not rospy.is_shutdown():
         # read frame
         ret, frame = vid.read()
 
