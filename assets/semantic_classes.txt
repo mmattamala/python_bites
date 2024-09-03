@@ -1,0 +1,10 @@
+person
+phone
+lamp
+window
+box
+teddy bear
+medicine
+bag
+backpack
+hat
