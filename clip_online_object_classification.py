@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # Configure plot
     fig = plt.figure(figsize=(6.4, 3.6), dpi=100)
 
-    fig, ax = plt.subplots(2, 1, figsize=(6.4, 3.6), dpi=100, sharex=True)
+    fig, axs = plt.subplots(2, 1, figsize=(6.4, 3.6), dpi=100, sharex=True)
     cap = cv2.VideoCapture(1)
 
     # Preallocate array for Bayesian prior
@@ -52,7 +52,11 @@ if __name__ == "__main__":
 
     # Main loop
     while True:
-        fig.clear()
+        # Clear axes
+        for ax in axs:
+            ax.clear()
+
+        # Read image
         success, img = cap.read()
         img = cv2.resize(img, (640, 360))
         image = preprocess(Image.fromarray(img)).unsqueeze(0).to(device)
@@ -62,35 +66,38 @@ if __name__ == "__main__":
         
             logits_per_image, logits_per_text = model(image, text)
             probs = logits_per_image.softmax(dim=-1).cpu().numpy()[0]
-
-            best_idx = int(np.argmax(probs))
-            best_class_prob = probs[best_idx]
-            best_class = classes[best_idx]
         
-        # Plotting fps data
-        ax[0].bar(classes, probs)
-        ax[0].title(f"Best class: {best_class} ({best_class_prob:.2f})")
-        ax[0].ylabel("Probability (Measurement)")
-        ax[0].xlabel("Classes")
-
         # Bayes filter
         belief = np.multiply(probs, prior)
         posterior = belief / np.sum(belief)
 
+        # Get most likely class
+        best_idx = int(np.argmax(posterior))
+        best_class_prob = posterior[best_idx]
+        best_class = classes[best_idx]
+
         # Update prior for next iteration
         prior = posterior.copy()
+        
+        # Plotting fps data
+        axs[0].bar(classes, probs)
+        axs[0].set_ylabel("Measurement")
 
         # Plot
-        ax[1].bar(classes, prior, color="r")
-        ax[1].ylabel("Probability (Posterior)")
+        axs[1].bar(classes, prior, color="r")
+        axs[1].set_ylabel("Posterior")
+        axs[1].set_xlabel("Classes")
+        axs[1].set_title(f"Best class: {best_class} ({best_class_prob:.2f})")
         plt.xticks(rotation=90)
         plt.tight_layout()
 
-        fig.canvas.draw()
-
         # Convert matplotlib into image
-        s, (width, height) = fig.canvas.print_to_buffer()
-        plot = np.frombuffer(s, np.uint8).reshape((height, width, 4))
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        canvas = FigureCanvasAgg(fig)
+        canvas.draw()
+        buf = canvas.buffer_rgba()
+        buf = np.asarray(buf)
+        plot = np.array(Image.fromarray(buf).convert("RGB"))
         plot = cv2.cvtColor(plot, cv2.COLOR_RGBA2BGR)
         plot = cv2.resize(plot, (640, 360))
         
