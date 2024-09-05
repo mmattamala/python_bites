@@ -5,7 +5,7 @@
 #
 # Dependencies (assuming ROS installation on base system)
 #  python3 -m venv env
-#  source activate env/bin/activate
+#  source env/bin/activate
 #  pip install opencv-python ftfy regex tqdm matplotlib
 #  pip install torch torchvision
 #  pip install git+https://github.com/openai/CLIP.git
@@ -36,6 +36,7 @@ if __name__ == "__main__":
     # Load semantic classes from file
     with open(CLASSES_FILE, "r") as file:
         classes = file.read().split("\n")
+        classes = classes[:-1]
     text = clip.tokenize(classes).to(device)
     with torch.inference_mode():
         text_features = model.encode_text(text)
@@ -63,10 +64,10 @@ if __name__ == "__main__":
 
         with torch.inference_mode():
             image_features = model.encode_image(image)
-        
+
             logits_per_image, logits_per_text = model(image, text)
             probs = logits_per_image.softmax(dim=-1).cpu().numpy()[0]
-        
+
         # Bayes filter
         belief = np.multiply(probs, prior)
         posterior = belief / np.sum(belief)
@@ -78,7 +79,7 @@ if __name__ == "__main__":
 
         # Update prior for next iteration
         prior = posterior.copy()
-        
+
         # Plotting fps data
         axs[0].bar(classes, probs)
         axs[0].set_ylabel("Measurement")
@@ -93,6 +94,7 @@ if __name__ == "__main__":
 
         # Convert matplotlib into image
         from matplotlib.backends.backend_agg import FigureCanvasAgg
+
         canvas = FigureCanvasAgg(fig)
         canvas.draw()
         buf = canvas.buffer_rgba()
@@ -100,7 +102,7 @@ if __name__ == "__main__":
         plot = np.array(Image.fromarray(buf).convert("RGB"))
         plot = cv2.cvtColor(plot, cv2.COLOR_RGBA2BGR)
         plot = cv2.resize(plot, (640, 360))
-        
+
         # Combining Original Frame and Plot Image
         result_img = np.hstack([img, plot])
 
