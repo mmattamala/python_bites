@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # Author: Matias Mattamala
 # Description: Numpy-based kalman filter with oulier rejection
+# This implementation is stateless, it doesn't store the estimates
 # This is the same used in Wild Visual Navigation 
 # https://github.com/leggedrobotics/wild_visual_navigation/blob/main/wild_visual_navigation/utils/kalman_filter.py
 #
@@ -40,42 +41,58 @@ class KalmanFilter:
         # Outlier rejection
         self._outlier_rejection = outlier_rejection
         self._outlier_delta = outlier_delta
+    
+    def _get_outlier_weight(self, error: np.ndarray, cov: np.ndarray):
+        if self._outlier_rejection != "none":
+            # Compute residual
+            r = np.sqrt(error.T @ np.linalg.inv(cov) @ error)
 
-    def init_process_model(self, proc_model=None, proc_cov=None, control_model=None):
+            # Apply outlier rejection strategy
+            if self._outlier_rejection == "hard":
+                weight = 0.0 if r.item() >= self._outlier_delta else 1.0
+
+            elif self._outlier_rejection == "huber":
+                # Prepare Huber loss
+                abs_r = np.abs(r)
+                weight = 1.0 if abs_r <= self._outlier_delta else (self._outlier_delta / abs_r).item()
+                return weight
+            else:
+                print(f"Invalid option outlier_rejection [{self._outlier_rejection}]. Ignore (w = 1.0)")
+                return 1.0
+        else:
+            return 1.0
+    
+    def _check_dim(self, reference, matrix):
+        assert (
+                matrix.shape == reference.shape
+            ), f"Dimensions do not match {matrix.shape} != {reference.shape}"
+
+
+    def set_process_model(self, proc_model=None, proc_cov=None, control_model=None):
         # Initialize process model
         if proc_model is not None:
-            assert (
-                self._proc_model.shape == proc_model.shape
-            ), f"Desired state doesn't match {self._proc_model.shape} (expected) != {proc_model.shape} (new)"
+            self._check_dim(self._proc_model, proc_model)
             self._proc_model = proc_model
 
         # Initialize process model covariance
         if proc_cov is not None:
-            assert (
-                self._proc_cov.shape == proc_cov.shape
-            ), f"Desired state doesn't match {self._proc_cov.shape} (expected) != {proc_cov.shape} (new)"
+            self._check_dim(self._proc_cov, proc_cov)
             self._proc_cov = proc_cov
 
         # Initialize control
         if control_model is not None:
-            assert (
-                self._control_model.shape == control_model.shape
-            ), f"Desired state doesn't match {self._control_model.shape} (expected) != {control_model.shape} (new)"
+            self._check_dim(self._control_model, control_model)
             self._control_model = control_model
 
-    def init_meas_model(self, meas_model=None, meas_cov=None):
+    def set_meas_model(self, meas_model=None, meas_cov=None):
         # Initialize measurement model
         if meas_model is not None:
-            assert (
-                self._meas_model.shape == meas_model.shape
-            ), f"Desired state doesn't match {self._meas_model.shape} (expected) != {meas_model.shape} (new)"
+            self._check_dim(self._meas_model, meas_model)
             self._meas_model = meas_model
 
         # Initialize measurement model covariance
         if meas_cov is not None:
-            assert (
-                self._meas_cov.shape == meas_cov.shape
-            ), f"Desired state doesn't match {self._meas_cov.shape} (expected) != {meas_cov.shape} (new)"
+            self._check_dim(self._meas_cov, meas_cov)
             self._meas_cov = meas_cov
 
     def prediction(self, state: np.ndarray, state_cov: np.ndarray, control: np.ndarray = None):
@@ -109,26 +126,6 @@ class KalmanFilter:
 
         return state, state_cov
 
-    def _get_outlier_weight(self, error: np.ndarray, cov: np.ndarray):
-        if self._outlier_rejection != "none":
-            # Compute residual
-            r = np.sqrt(error.T @ np.linalg.inv(cov) @ error)
-
-            # Apply outlier rejection strategy
-            if self._outlier_rejection == "hard":
-                weight = 0.0 if r.item() >= self._outlier_delta else 1.0
-
-            elif self._outlier_rejection == "huber":
-                # Prepare Huber loss
-                abs_r = np.abs(r)
-                weight = 1.0 if abs_r <= self._outlier_delta else (self._outlier_delta / abs_r).item()
-                return weight
-            else:
-                print(f"Outlier rejection due to invalid option outlier_rejection [{self._outlier_rejection}].")
-                return 1.0
-        else:
-            return 1.0
-
     def step(self, state, state_cov, meas, control=None):
         state, state_cov = self.prediction(state, state_cov, control)
         state, state_cov = self.correction(state, state_cov, meas)
@@ -142,8 +139,8 @@ def run_kalman_filter():
 
     # Normal KF
     kf1 = KalmanFilter(dim_state=1, dim_control=1, dim_meas=1, outlier_rejection="none")
-    kf1.init_process_model(proc_model=np.eye(1) * 1, proc_cov=np.eye(1) * 0.5)
-    kf1.init_meas_model(meas_model=np.eye(1), meas_cov=np.eye(1) * 1)
+    kf1.set_process_model(proc_model=np.eye(1) * 1, proc_cov=np.eye(1) * 0.5)
+    kf1.set_meas_model(meas_model=np.eye(1), meas_cov=np.eye(1) * 1)
 
     # Outlier-robust KF
     kf2 = KalmanFilter(
@@ -153,8 +150,8 @@ def run_kalman_filter():
         outlier_rejection="huber",
         outlier_delta=0.2,
     )
-    kf2.init_process_model(proc_model=np.eye(1) * 1, proc_cov=np.eye(1) * 0.5)
-    kf2.init_meas_model(meas_model=np.eye(1), meas_cov=np.eye(1) * 1)
+    kf2.set_process_model(proc_model=np.eye(1) * 1, proc_cov=np.eye(1) * 0.5)
+    kf2.set_meas_model(meas_model=np.eye(1), meas_cov=np.eye(1) * 1)
 
     N = 300
     # Default signal
